@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Builder;
+use App\Models\Preinscription; // IMPORT AJOUTÉ
 
 class User extends Authenticatable
 {
@@ -13,7 +14,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name',
-        'email',
+        'email', 
         'password',
         'role',
         'is_active'
@@ -102,6 +103,12 @@ class User extends Authenticatable
         return $this->is_active ? 'Actif' : 'Inactif';
     }
 
+    // ACCESSOR POUR CSS (NOUVEAU)
+    public function getStatutCssClassAttribute()
+    {
+        return $this->is_active ? 'text-success' : 'text-danger';
+    }
+
     public function getInitialesAttribute()
     {
         $words = explode(' ', $this->name);
@@ -140,6 +147,11 @@ class User extends Authenticatable
         static::creating(function ($user) {
             // S'assurer que l'email est en minuscule
             $user->email = strtolower($user->email);
+            
+            // Validation du rôle (OPTIONNEL)
+            if (!in_array($user->role, ['admin', 'agent'])) {
+                throw new \InvalidArgumentException("Rôle invalide: doit être 'admin' ou 'agent'");
+            }
         });
 
         static::updating(function ($user) {

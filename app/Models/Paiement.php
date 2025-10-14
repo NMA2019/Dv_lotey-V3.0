@@ -18,7 +18,9 @@ class Paiement extends Model
         'montant',
         'statut',
         'date_paiement',
-        'notes'
+        'commentaire',
+        'preuve_paiement',
+        'agent_id'
     ];
 
     protected $casts = [
@@ -32,44 +34,46 @@ class Paiement extends Model
         return $this->belongsTo(Preinscription::class);
     }
 
-    // SCOPES
-    public function scopePayes(Builder $query)
+    public function agent()
     {
-        return $query->where('statut', 'paye');
+        return $this->belongsTo(User::class, 'agent_id');
     }
 
+    // SCOPES
     public function scopeEnAttente(Builder $query)
     {
         return $query->where('statut', 'en_attente');
     }
 
-    public function scopeEchecs(Builder $query)
+    public function scopeValides(Builder $query)
     {
-        return $query->where('statut', 'echec');
+        return $query->where('statut', 'valide');
     }
 
-    public function scopeRembourses(Builder $query)
+    public function scopeRejetes(Builder $query)
     {
-        return $query->where('statut', 'rembourse');
+        return $query->where('statut', 'rejete');
     }
 
-    public function scopeParMode(Builder $query, $mode)
+    public function scopeToday(Builder $query)
     {
-        return $query->where('mode_paiement', $mode);
+        return $query->whereDate('created_at', today());
     }
 
-    public function scopeParPeriode(Builder $query, $debut, $fin)
+    public function scopeThisMonth(Builder $query)
     {
-        return $query->whereBetween('created_at', [$debut, $fin]);
+        return $query->whereMonth('created_at', now()->month);
     }
 
     // ACCESSORS
     public function getModePaiementLisibleAttribute()
     {
         $modes = [
-            'mtn' => 'Mobile Money (MTN)',
-            'orange' => 'Mobile Money (Orange)',
-            'espece' => 'Espèces'
+            'mtn' => 'MTN Mobile Money',
+            'orange' => 'Orange Money',
+            'espece' => 'Espèces',
+            'wave' => 'Wave',
+            'carte' => 'Carte Bancaire'
         ];
 
         return $modes[$this->mode_paiement] ?? $this->mode_paiement;
@@ -79,8 +83,8 @@ class Paiement extends Model
     {
         $statuts = [
             'en_attente' => 'En attente',
-            'paye' => 'Payé',
-            'echec' => 'Échec',
+            'valide' => 'Validé',
+            'rejete' => 'Rejeté',
             'rembourse' => 'Remboursé'
         ];
 
@@ -91,8 +95,8 @@ class Paiement extends Model
     {
         $classes = [
             'en_attente' => 'warning',
-            'paye' => 'success',
-            'echec' => 'danger',
+            'valide' => 'success',
+            'rejete' => 'danger',
             'rembourse' => 'info'
         ];
 
@@ -101,97 +105,39 @@ class Paiement extends Model
 
     public function getMontantFormateAttribute()
     {
-        return number_format($this->montant, 2, ',', ' ') . ' FCFA';
-    }
-
-    public function getEstPayeAttribute()
-    {
-        return $this->statut === 'paye';
-    }
-
-    public function getEstEnAttenteAttribute()
-    {
-        return $this->statut === 'en_attente';
+        return number_format($this->montant, 0, ',', ' ') . ' FCFA';
     }
 
     // MÉTHODES MÉTIERS
-    public function marquerCommePaye($datePaiement = null)
+    public function valider($agentId, $commentaire = null)
     {
         $this->update([
-            'statut' => 'paye',
-            'date_paiement' => $datePaiement ?? now()
+            'statut' => 'valide',
+            'agent_id' => $agentId,
+            'date_paiement' => now(),
+            'commentaire' => $commentaire
         ]);
 
-        return $this;
+        // Mettre à jour le statut de la préinscription
+        $this->preinscription->update(['statut' => 'valide']);
     }
 
-    public function marquerCommeEchec($notes = null)
+    public function rejeter($agentId, $commentaire)
     {
         $this->update([
-            'statut' => 'echec',
-            'notes' => $notes
+            'statut' => 'rejete',
+            'agent_id' => $agentId,
+            'commentaire' => $commentaire
         ]);
-
-        return $this;
     }
 
-    public function marquerCommeRembourse($notes = null)
+    public function estValide()
     {
-        $this->update([
-            'statut' => 'rembourse',
-            'notes' => $notes
-        ]);
-
-        return $this;
+        return $this->statut === 'valide';
     }
 
-    public function peutEtreRembourse()
+    public function estEnAttente()
     {
-        return $this->est_paye && !$this->est_rembourse;
-    }
-
-    public function getTarifParDefaut()
-    {
-        // Vous pouvez adapter cette logique selon vos besoins
-        return 5000.00; // 5,000 FCFA par exemple
-    }
-
-    // ÉVÉNEMENTS
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($paiement) {
-            // Définir le montant par défaut si non spécifié
-            if (empty($paiement->montant)) {
-                $paiement->montant = $paiement->getTarifParDefaut();
-            }
-        });
-    }
-
-    // MÉTHODES STATIQUES
-    public static function getStatsParMode()
-    {
-        return static::selectRaw('mode_paiement, count(*) as count, sum(montant) as total')
-            ->where('statut', 'paye')
-            ->groupBy('mode_paiement')
-            ->get()
-            ->mapWithKeys(function ($item) {
-                return [
-                    $item->mode_paiement => [
-                        'count' => $item->count,
-                        'total' => $item->total
-                    ]
-                ];
-            })
-            ->toArray();
-    }
-
-    public static function getChiffreAffairesMensuel()
-    {
-        return static::where('statut', 'paye')
-            ->whereYear('date_paiement', now()->year)
-            ->whereMonth('date_paiement', now()->month)
-            ->sum('montant');
+        return $this->statut === 'en_attente';
     }
 }

@@ -5,113 +5,149 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Preinscription;
-use App\Models\User;
 use App\Models\Paiement;
+use App\Models\User;
+use App\Models\Creneau;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use DB;
+use Log;
 
 class DashboardController extends Controller
 {
-    /**
-     * Tableau de bord principal
-     */
     public function index()
     {
-        $stats = $this->getDashboardStats();
+        $stats = $this->getStatsGlobales();
+        $todayStats = $this->getTodayStats();
+        $monthlyData = $this->getMonthlyData();
         $recentPreinscriptions = $this->getRecentPreinscriptions();
-        $rdvProchains = $this->getProchainsRendezVous();
+        $rdvAujourdhui = $this->getRdvAujourdhui();
+        $paiementsStats = $this->getPaiementsStats();
 
-        return view('admin.dashboard', compact('stats', 'recentPreinscriptions', 'rdvProchains'));
+        return view('admin.dashboard', compact(
+            'stats',
+            'todayStats', 
+            'monthlyData',
+            'recentPreinscriptions',
+            'rdvAujourdhui',
+            'paiementsStats'
+        ));
     }
 
-    /**
-     * Récupérer les statistiques du dashboard
-     */
-    private function getDashboardStats()
+    private function getStatsGlobales()
     {
-        $user = auth()->user();
-        
-        if ($user->isAdmin()) {
-            // Stats pour l'admin
-            $baseQuery = Preinscription::query();
-        } else {
-            // Stats pour l'agent (seulement ses préinscriptions)
-            $baseQuery = Preinscription::where('agent_id', $user->id);
-        }
-
         return [
-            'total_preinscriptions' => $baseQuery->count(),
-            'en_attente' => $baseQuery->clone()->enAttente()->count(),
-            'validees' => $baseQuery->clone()->valides()->count(),
-            'rejetees' => $baseQuery->clone()->rejetes()->count(),
-            'reclasses' => $baseQuery->clone()->reclasses()->count(),
-            'pour_aujourdhui' => Preinscription::pourAujourdhui()->count(),
+            'total_preinscriptions' => Preinscription::count(),
+            'en_attente' => Preinscription::enAttente()->count(),
+            'valides' => Preinscription::valides()->count(),
+            'rejetees' => Preinscription::rejetees()->count(),
+            'reclasses' => Preinscription::reclasses()->count(),
+            
+            // Stats paiements
             'paiements_attente' => Paiement::enAttente()->count(),
+            'paiements_valides' => Paiement::valides()->count(),
+            'paiements_rejetes' => Paiement::rejetes()->count(),
+            'revenus_mois' => Paiement::valides()->thisMonth()->sum('montant'),
+            
+            // Stats utilisateurs
+            'total_agents' => User::agent()->active()->count(),
+            'agents_actifs' => User::agent()->active()->count(),
         ];
     }
 
-    /**
-     * Récupérer les préinscriptions récentes
-     */
+    private function getTodayStats()
+    {
+        return [
+            'nouvelles' => Preinscription::whereDate('created_at', today())->count(),
+            'traitees' => Preinscription::whereDate('updated_at', today())
+                            ->whereIn('statut', ['valide', 'rejete', 'reclasse'])
+                            ->count(),
+            'rendez_vous' => Preinscription::whereDate('date_rendez_vous', today())->count(),
+            'paiements' => Paiement::whereDate('created_at', today())->count(),
+        ];
+    }
+
+    private function getMonthlyData()
+    {
+        $data = Preinscription::select(
+            DB::raw('MONTH(created_at) as month'),
+            DB::raw('COUNT(*) as count'),
+            DB::raw('SUM(CASE WHEN statut = "valide" THEN 1 ELSE 0 END) as valides')
+        )
+        ->whereYear('created_at', date('Y'))
+        ->groupBy('month')
+        ->orderBy('month')
+        ->get();
+
+        $monthly = array_fill(1, 12, 0);
+        $valides = array_fill(1, 12, 0);
+
+        foreach ($data as $item) {
+            $monthly[$item->month] = $item->count;
+            $valides[$item->month] = $item->valides;
+        }
+
+        return [
+            'labels' => ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'],
+            'total' => array_values($monthly),
+            'valides' => array_values($valides)
+        ];
+    }
+
+    private function getPaiementsStats()
+    {
+        return [
+            'par_mode' => Paiement::select('mode_paiement', DB::raw('COUNT(*) as count'))
+                            ->groupBy('mode_paiement')
+                            ->pluck('count', 'mode_paiement')
+                            ->toArray(),
+            'revenus_jour' => Paiement::valides()->today()->sum('montant'),
+            'revenus_semaine' => Paiement::valides()->whereBetween('date_paiement', [now()->startOfWeek(), now()->endOfWeek()])->sum('montant'),
+        ];
+    }
+
     private function getRecentPreinscriptions()
     {
-        $user = auth()->user();
-        $query = Preinscription::with('paiement')->latest();
-
-        if (!$user->isAdmin()) {
-            $query->where('agent_id', $user->id);
-        }
-
-        return $query->limit(10)->get();
+        return Preinscription::with(['paiement', 'agent'])
+                    ->latest()
+                    ->limit(10)
+                    ->get();
     }
 
-    /**
-     * Récupérer les prochains rendez-vous
-     */
-    private function getProchainsRendezVous()
+    private function getRdvAujourdhui()
     {
-        $user = auth()->user();
-        $query = Preinscription::with('agent')
-            ->whereDate('date_rendez_vous', '>=', today())
-            ->orderBy('date_rendez_vous')
-            ->orderBy('heure_rendez_vous');
-
-        if (!$user->isAdmin()) {
-            $query->where('agent_id', $user->id);
-        }
-
-        return $query->limit(5)->get();
+        return Preinscription::with(['paiement'])
+                    ->whereDate('date_rendez_vous', today())
+                    ->orderBy('heure_rendez_vous')
+                    ->get()
+                    ->map(function($preinscription) {
+                        return (object)[
+                            'nom_complet' => $preinscription->nom_complet,
+                            'numero_dossier' => $preinscription->numero_dossier,
+                            'heure_rendez_vous' => $preinscription->heure_rendez_vous,
+                            'statut_css_class' => $preinscription->statut_css_class,
+                            'statut_label' => $preinscription->statut_label
+                        ];
+                    });
     }
 
-    /**
-     * Statistiques avancées (pour les graphiques)
-     */
-    public function statistiques(Request $request)
+    public function getStatsApi(Request $request)
     {
-        $periode = $request->get('periode', 'mois');
+        $periode = $request->get('periode', 'month');
         
         $stats = match($periode) {
-            'semaine' => $this->getStatsSemaine(),
-            'mois' => $this->getStatsMois(),
-            'annee' => $this->getStatsAnnee(),
-            default => $this->getStatsMois()
+            'week' => $this->getWeeklyStats(),
+            'month' => $this->getMonthlyStats(),
+            'year' => $this->getYearlyStats(),
+            default => $this->getMonthlyStats()
         };
 
         return response()->json($stats);
     }
 
-    private function getStatsMois()
+    private function getWeeklyStats()
     {
-        $debut = now()->startOfMonth();
-        $fin = now()->endOfMonth();
-
-        return [
-            'labels' => ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'],
-            'preinscriptions' => [45, 52, 38, 60],
-            'validations' => [30, 45, 28, 50],
-            'paiements' => [28, 40, 25, 45]
-        ];
+        // Implémentation des stats hebdomadaires
+        return [];
     }
-
-    // Autres méthodes pour les statistiques...
 }

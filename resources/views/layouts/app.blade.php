@@ -32,9 +32,11 @@
                                     {{ Auth::user()->name }}
                                 </a>
                                 <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="{{ route('dashboard') }}">Dashboard</a></li>
+                                    <!-- CORRECTION: Utiliser la route correcte -->
+                                    <li><a class="dropdown-item" href="{{ route('admin.dashboard') }}">Dashboard</a></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
+                                        <!-- CORRECTION: Utiliser la route de déconnexion Laravel -->
                                         <form method="POST" action="{{ route('logout') }}">
                                             @csrf
                                             <button type="submit" class="dropdown-item">Déconnexion</button>
