@@ -1,20 +1,14 @@
 <?php
+// app/Http/Controllers/Admin/PreinscriptionController.php
 
-namespace App\Http\Controllers\Public;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Mail\PreinscriptionConfirmation;
-use App\Models\Paiement;
 use App\Models\Preinscription;
+use App\Models\Paiement;
 use App\Models\User;
-use App\Notifications\NewPreinscriptionNotification;
-use Carbon\Carbon;
-use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Gate;
 
 class PreinscriptionController extends Controller
 {
