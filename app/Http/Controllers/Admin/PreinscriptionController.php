@@ -9,6 +9,16 @@ use App\Models\Paiement;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\NewPreinscriptionNotification;
+use App\Mail\PreinscriptionConfirmation;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+// use PDF; // Si vous utilisez une bibliothèque PDF comme barryvdh/laravel-dompdf
+
 
 class PreinscriptionController extends Controller
 {
