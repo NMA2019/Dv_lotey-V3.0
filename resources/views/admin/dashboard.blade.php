@@ -1,4 +1,3 @@
-<!-- resources/views/admin/dashboard.blade.php -->
 @extends('layouts.app')
 
 @section('title', 'Tableau de Bord Admin')
@@ -11,7 +10,7 @@
                 <ul class="nav flex-column">
                     <li class="nav-item">
                         <a class="nav-link active" href="{{ route('admin.dashboard') }}">
-                            <i class="fas fa-tachometer-alt me-2"></i>
+                            <i class="fas fa-tachometer-alt me-2" style="color: #fff; text-align:center"></i>
                             Tableau de Bord
                         </a>
                     </li>
@@ -40,7 +39,7 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ route('admin.users.index') }}">
                             <i class="fas fa-users me-2"></i>
-                            Utilisateurs
+                            Users
                             <span class="badge bg-secondary float-end">{{ $stats['total_agents'] }}</span>
                         </a>
                     </li>

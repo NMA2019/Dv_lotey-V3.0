@@ -35,4 +35,21 @@ return [
         ],
     ],
 
+'sendgrid' => [
+        'api_key' => env('SENDGRID_API_KEY'),
+    ],
+
+    'mtn' => [
+        'api_key' => env('MTN_API_KEY'),
+        'api_secret' => env('MTN_API_SECRET'),
+        'merchant_id' => env('MTN_MERCHANT_ID'),
+        'environment' => env('MTN_ENVIRONMENT', 'sandbox'), // sandbox ou production
+    ],
+
+    'orange' => [
+        'client_id' => env('ORANGE_CLIENT_ID'),
+        'client_secret' => env('ORANGE_CLIENT_SECRET'),
+        'merchant_key' => env('ORANGE_MERCHANT_KEY'),
+        'environment' => env('ORANGE_ENVIRONMENT', 'sandbox'),
+    ],
 ];

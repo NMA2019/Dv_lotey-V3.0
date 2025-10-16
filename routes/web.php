@@ -7,10 +7,11 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\PreinscriptionController as AdminPreinscriptionController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PdfController;
+use App\Http\Controllers\Admin\PaiementController;
+use App\Http\Controllers\Admin\CalendrierController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
-
 
 /*
 |--------------------------------------------------------------------------
@@ -29,9 +30,23 @@ Route::post('/contact', [PageController::class, 'envoyerMessage'])->name('contac
 Route::get('/verification-statut', [PreinscriptionController::class, 'checkStatusPage'])->name('verification.statut');
 Route::post('/verification-statut', [PreinscriptionController::class, 'checkStatus'])->name('verification.statut.check');
 
+// Routes de paiement public
+Route::prefix('paiement')->name('payment.')->group(function () {
+    // Formulaire de paiement
+    Route::get('/preinscription/{preinscription}', [PaymentController::class, 'showPaymentForm'])->name('form');
+    Route::post('/preinscription/{preinscription}/process', [PaymentController::class, 'processPayment'])->name('process');
+    Route::get('/status/{preinscription}/{transaction_id}', [PaymentController::class, 'paymentStatus'])->name('status');
+    Route::post('/check-status', [PaymentController::class, 'checkStatus'])->name('check.status');
+    Route::post('/{paiement}/cancel', [PaymentController::class, 'cancelPayment'])->name('cancel');
+
+    // Webhooks
+    Route::post('/webhook/mtn', [PaymentController::class, 'handleMtnWebhook'])->name('mtn.webhook');
+    Route::post('/webhook/orange', [PaymentController::class, 'handleOrangeWebhook'])->name('orange.webhook');
+    Route::get('/callback/orange', [PaymentController::class, 'handleOrangeCallback'])->name('orange.callback');
+});
 /*
 |--------------------------------------------------------------------------
-| Processus de Préinscription
+| Processus de Préinscription Publique
 |--------------------------------------------------------------------------
 */
 
@@ -68,10 +83,10 @@ Route::prefix('preinscription')->name('preinscription.')->group(function () {
 // Routes d'authentification Laravel (désactiver l'inscription)
 Auth::routes(['register' => false]);
 
-// Routes d'authentification personnalisées (alternative)
+// Routes d'authentification personnalisées
 Route::middleware('guest')->group(function () {
     Route::get('/login-custom', [AuthController::class, 'showLoginForm'])->name('login.custom');
-    Route::post('/login-custom', [AuthController::class, 'login']);
+    Route::post('/login-custom', [AuthController::class, 'login'])->name('login.custom.submit');
 });
 
 Route::post('/logout-custom', [AuthController::class, 'logout'])->name('logout.custom');
@@ -108,7 +123,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::post('/{preinscription}/reclasser', [AdminPreinscriptionController::class, 'reclasser'])->name('reclasser');
         Route::post('/{preinscription}/mettre-en-attente', [AdminPreinscriptionController::class, 'mettreEnAttente'])->name('mettre-en-attente');
         
-        // Export Excel
+        // Export
         Route::get('/export/excel', [AdminPreinscriptionController::class, 'exporter'])->name('export.excel');
     });
 
@@ -134,26 +149,6 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 
     /*
     |--------------------------------------------------------------------------
-    | Gestion des Utilisateurs (Admin uniquement)
-    |--------------------------------------------------------------------------
-    */
-    
-    Route::middleware(['admin'])->prefix('users')->name('users.')->group(function () {
-        // CRUD Utilisateurs
-        Route::get('/', [UserController::class, 'index'])->name('index');
-        Route::post('/', [UserController::class, 'store'])->name('store');
-        Route::get('/create', [UserController::class, 'create'])->name('create');
-        Route::get('/{user}/edit', [UserController::class, 'edit'])->name('edit');
-        Route::put('/{user}', [UserController::class, 'update'])->name('update');
-        Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
-        
-        // Actions supplémentaires
-        Route::post('/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('toggle-status');
-        Route::post('/{user}/reset-password', [UserController::class, 'resetPassword'])->name('reset-password');
-    });
-
-    /*
-    |--------------------------------------------------------------------------
     | Gestion des Paiements
     |--------------------------------------------------------------------------
     */
@@ -175,6 +170,41 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::post('/creneaux/generer', [AdminPreinscriptionController::class, 'genererCreneaux'])->name('creneaux.generer');
         Route::put('/creneaux/{creneau}', [AdminPreinscriptionController::class, 'updateCreneau'])->name('creneaux.update');
     });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Gestion des Utilisateurs (Admin uniquement)
+    |--------------------------------------------------------------------------
+    */
+    
+    Route::middleware(['admin'])->prefix('users')->name('users.')->group(function () {
+        // CRUD Utilisateurs
+        Route::get('/', [UserController::class, 'index'])->name('index');
+        Route::get('/create', [UserController::class, 'create'])->name('create');
+        Route::post('/', [UserController::class, 'store'])->name('store');
+        Route::get('/{user}/edit', [UserController::class, 'edit'])->name('edit');
+        Route::put('/{user}', [UserController::class, 'update'])->name('update');
+        Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
+        
+        // Statistiques utilisateurs
+        Route::get('/stats/agents', [UserController::class, 'stats'])->name('stats');
+        
+        // Actions supplémentaires
+        Route::post('/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('toggle-status');
+        Route::post('/{user}/reset-password', [UserController::class, 'resetPassword'])->name('reset-password');
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Routes API Publiques
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('api')->name('api.')->group(function () {
+    Route::get('/preinscription/status', [PreinscriptionController::class, 'checkStatus'])->name('preinscription.status');
+    Route::get('/calendrier/creneaux', [PreinscriptionController::class, 'getCreneauxDisponibles'])->name('calendrier.creneaux');
+    Route::get('/preinscription/{numero}/details', [PreinscriptionController::class, 'getPreinscriptionDetails'])->name('preinscription.details');
 });
 
 /*
@@ -188,18 +218,12 @@ Route::get('/home', function () {
     return redirect()->route('admin.dashboard');
 })->name('home');
 
+// Redirection /admin vers dashboard
+Route::get('/admin', function () {
+    return redirect()->route('admin.dashboard');
+});
+
 // Route de fallback pour les pages 404
 Route::fallback(function () {
     return response()->view('errors.404', [], 404);
-});
-
-/*
-|--------------------------------------------------------------------------
-| Routes API (si nécessaire)
-|--------------------------------------------------------------------------
-*/
-
-Route::prefix('api')->group(function () {
-    Route::get('/preinscription/status', [PreinscriptionController::class, 'checkStatus']);
-    Route::get('/calendrier/creneaux', [PreinscriptionController::class, 'getCreneauxDisponibles']);
 });

@@ -1,5 +1,4 @@
 <?php
-// app/Http/Middleware/AdminMiddleware.php
 
 namespace App\Http\Middleware;
 
@@ -11,10 +10,12 @@ class AdminMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // Vérifier si l'utilisateur est connecté
         if (!auth()->check()) {
             return redirect()->route('login');
         }
 
+        // Vérifier si l'utilisateur est admin
         if (!auth()->user()->isAdmin()) {
             abort(403, 'Accès non autorisé. Droits administrateur requis.');
         }

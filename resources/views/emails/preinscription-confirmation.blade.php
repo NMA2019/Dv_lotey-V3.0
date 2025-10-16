@@ -18,7 +18,7 @@
     <div class="container">
         <div class="header">
             <h1>✅ Préinscription Confirmée</h1>
-            <p>Dv_lotey V2.0 - Loterie Américaine</p>
+            <p>Dv_lotey 2027 - Loterie Américaine</p>
         </div>
         
         <div class="content">
@@ -41,7 +41,7 @@
             <div class="info-box">
                 <strong>Rendez-vous :</strong><br>
                 Le {{ $preinscription->date_rendez_vous->format('d/m/Y') }} à {{ $preinscription->heure_rendez_vous }}<br>
-                Centre de Formation Professionnelle, Douala
+                Centre de Formation Professionnelle, Logpom-Douala
             </div>
             
             <div class="info-box">
@@ -54,9 +54,9 @@
                 </ul>
             </div>
             
-            <p><strong>Important :</strong> Conservez précieusement ce numéro de dossier pour tout suivi.</p>
+            <p><strong>Important :</strong> Conservez précieusement ce numéro de dossier et tâchez de respecter l'heure du rendez-vous</p>
             
-            <p>Pour toute question, contactez-nous à <a href="mailto:contact@dvlotey.com">contact@dvlotey.com</a></p>
+            <p>Pour toute question, contactez-nous à <a href="mailto:contact@dvlotey.com">ecolemondedigital@gmail.com</a></p>
         </div>
         
         <div class="footer">

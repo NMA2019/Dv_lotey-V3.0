@@ -6,11 +6,22 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use App\Models\Preinscription;
 use App\Models\Paiement;
+use App\Services\NotificationService;
+use App\Services\PaiementService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class PreinscriptionController extends Controller
 {
+    protected $notificationService;
+    protected $paiementService;
+
+    public function __construct(NotificationService $notificationService, PaiementService $paiementService)
+    {
+        $this->notificationService = $notificationService;
+        $this->paiementService = $paiementService;
+    }
+
     /**
      * Étape 1 - Informations personnelles
      */
@@ -154,8 +165,16 @@ class PreinscriptionController extends Controller
         );
 
         try {
+            DB::beginTransaction();
+
+            // Générer un numéro de dossier unique
+            $numeroDossier = 'PR' . date('Ymd') . str_pad(Preinscription::whereDate('created_at', today())->count() + 1, 4, '0', STR_PAD_LEFT);
+
             // Créer la préinscription
-            $preinscription = Preinscription::create($data);
+            $preinscription = Preinscription::create(array_merge($data, [
+                'numero_dossier' => $numeroDossier,
+                'statut' => 'en_attente'
+            ]));
 
             // Créer le paiement associé
             $paiement = Paiement::create([
@@ -166,15 +185,20 @@ class PreinscriptionController extends Controller
                 'statut' => 'en_attente'
             ]);
 
+            // Envoyer la notification de confirmation
+            $this->notificationService->sendPreinscriptionConfirmation($preinscription);
+
             // Nettoyer la session
             session()->forget(['etape1', 'etape2', 'etape3']);
 
-            // Ici vous pouvez ajouter l'envoi de notifications
-            // $this->envoyerNotifications($preinscription);
+            DB::commit();
 
             return redirect()->route('preinscription.confirmation', $preinscription);
 
         } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Erreur lors de la création de préinscription: ' . $e->getMessage());
+            
             return redirect()->route('preinscription.etape1')
                 ->with('error', 'Une erreur est survenue lors de la soumission. Veuillez réessayer.');
         }
@@ -186,6 +210,51 @@ class PreinscriptionController extends Controller
     public function confirmation(Preinscription $preinscription)
     {
         return view('public.preinscription.confirmation', compact('preinscription'));
+    }
+
+    /**
+     * Vérification du statut d'une préinscription
+     */
+    public function checkStatusPage()
+    {
+        return view('public.preinscription.verification-statut');
+    }
+
+    /**
+     * Vérifier le statut d'une préinscription
+     */
+    public function checkStatus(Request $request)
+    {
+        $request->validate([
+            'numero_dossier' => 'required|string|max:255',
+            'email' => 'required|email'
+        ]);
+
+        $preinscription = Preinscription::where('numero_dossier', $request->numero_dossier)
+            ->where('email', $request->email)
+            ->first();
+
+        if (!$preinscription) {
+            return redirect()->back()
+                ->with('error', 'Aucune préinscription trouvée avec ces informations.')
+                ->withInput();
+        }
+
+        return view('public.preinscription.statut-resultat', compact('preinscription'));
+    }
+
+    /**
+     * Télécharger le reçu
+     */
+    public function downloadReceipt(Preinscription $preinscription)
+    {
+        // Vérifier que l'utilisateur a le droit de voir ce reçu
+        if (!session()->has('preinscription_access') && !request()->hasValidSignature()) {
+            abort(403, 'Accès non autorisé.');
+        }
+
+        // Générer le PDF du reçu
+        return $this->notificationService->generateReceiptPdf($preinscription);
     }
 
     /**
@@ -210,7 +279,7 @@ class PreinscriptionController extends Controller
         $today = now();
         
         for ($i = 1; $i <= 14; $i++) {
-            $date = $today->addDay();
+            $date = $today->copy()->addDays($i);
             
             // Exclure les weekends
             if (!$date->isWeekend()) {
@@ -222,14 +291,37 @@ class PreinscriptionController extends Controller
     }
 
     /**
-     * Envoyer les notifications (à implémenter)
+     * Traitement du paiement mobile money
      */
-    private function envoyerNotifications(Preinscription $preinscription)
+    public function processPaiement(Request $request)
     {
-        // Notification aux administrateurs
-        // Notification::send(User::admin()->get(), new NewPreinscriptionNotification($preinscription));
-        
-        // Email de confirmation au client
-        // Mail::to($preinscription->email)->send(new PreinscriptionConfirmation($preinscription));
+        $request->validate([
+            'preinscription_id' => 'required|exists:preinscriptions,id',
+            'operator' => 'required|in:mtn,orange',
+            'phone' => 'required|string|max:20'
+        ]);
+
+        try {
+            $preinscription = Preinscription::findOrFail($request->preinscription_id);
+            
+            // Traiter le paiement via le service approprié
+            $result = $this->paiementService->processMobilePayment(
+                $preinscription,
+                $request->operator,
+                $request->phone,
+                5000 // Montant
+            );
+
+            if ($result['success']) {
+                return redirect()->route('preinscription.confirmation', $preinscription)
+                    ->with('success', 'Paiement effectué avec succès!');
+            } else {
+                return redirect()->back()
+                    ->with('error', 'Erreur lors du paiement: ' . $result['message']);
+            }
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Erreur lors du traitement du paiement: ' . $e->getMessage());
+        }
     }
 }

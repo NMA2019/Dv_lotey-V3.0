@@ -129,4 +129,25 @@ return [
 
     ],
 
+    'payment' => [
+        'driver' => 'daily',
+        'path' => storage_path('logs/payment.log'),
+        'level' => 'info',
+        'days' => 30,
+    ],
+    
+    'mtn' => [
+        'driver' => 'daily',
+        'path' => storage_path('logs/mtn.log'),
+        'level' => 'info',
+        'days' => 30,
+    ],
+    
+    'orange' => [
+        'driver' => 'daily',
+        'path' => storage_path('logs/orange.log'),
+        'level' => 'info',
+        'days' => 30,
+    ],
+
 ];

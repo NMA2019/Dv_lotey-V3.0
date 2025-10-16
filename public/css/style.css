@@ -394,7 +394,7 @@ body {
     }
     
     .sidebar {
-        min-height: auto;
+        min-height: initial;
         border-right: none;
         border-bottom: 1px solid #dee2e6;
     }

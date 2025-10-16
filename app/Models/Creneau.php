@@ -9,11 +9,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Shemas\DB;
 
 class Creneau extends Model
 {
     use HasFactory;
+
+    protected $table = 'creneaux';
+
 
     protected $fillable = [
         'date_creneau',
@@ -110,9 +113,9 @@ class Creneau extends Model
                     Creneau::firstOrCreate([
                         'date_creneau' => $date->format('Y-m-d'),
                         'heure_debut' => $heure[0],
-                        'heure_fin' => $heure[0.5],
+                        'heure_fin' => $heure[1/2],
                     ], [
-                        'capacite_max' => 15,
+                        'capacite_max' => 20,
                         'est_actif' => true
                     ]);
                 }
